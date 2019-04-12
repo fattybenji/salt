@@ -81,6 +81,10 @@ def until(name,
     if name not in __salt__:
         ret['comment'] = 'Cannot find module {0}'.format(name)
         return ret
+    if m_args is None:
+        m_args = []
+    if m_kwargs is None:
+        m_kwargs = {}
     if condition is None:
         ret['comment'] = 'An exit condition must be specified'
         return ret
