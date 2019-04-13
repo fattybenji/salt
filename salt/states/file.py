@@ -5369,40 +5369,51 @@ def prepend(name,
 
     text = _validate_str_list(text)
 
+    # Get content of the file
     with salt.utils.files.fopen(name, 'rb') as fp_:
-        slines = fp_.read()
+        content = fp_.read()
         if six.PY3:
-            slines = slines.decode(__salt_system_encoding__)
-        slines = slines.splitlines(True)
+            content = content.decode(__salt_system_encoding__)
+        slines = content.splitlines(True)
 
     count = 0
     test_lines = []
 
     preface = []
-    for chunk in text:
 
-        # if header kwarg is unset of False, use regex search
-        if not header:
+    # if header kwarg is True, use verbatim compare
+    if header:
+        for chunk in text:
+            preface.extend(chunk.splitlines())
+        target_lines = slines[0:len(preface)]
+        if target_lines != preface:
+            if __opts__['test']:
+                test_lines = ['{0}\n'.format(line) for line in preface]
+            else:
+                __salt__['file.prepend'](name, *preface)
+            count = len(preface)
+    # if header kwarg is unset of False, use regex search
+    else:
+        for chunk in text:
             if __salt__['file.search'](
                     name,
                     salt.utils.stringutils.build_whitespace_split_regex(chunk),
                     multiline=True):
                 continue
 
-        lines = chunk.splitlines()
+            lines = chunk.splitlines()
 
-        for line in lines:
-            if __opts__['test']:
-                ret['comment'] = 'File {0} is set to be updated'.format(name)
-                ret['result'] = None
-                test_lines.append('{0}\n'.format(line))
-            else:
-                preface.append(line)
-            count += 1
+            for line in lines:
+                if __opts__['test']:
+                    test_lines.append('{0}\n'.format(line))
+                else:
+                    preface.append(line)
+                count += 1
 
     if __opts__['test']:
         nlines = test_lines + slines
         if slines != nlines:
+            ret['comment'] = 'File {0} is set to be updated'.format(name)
             if not __utils__['files.is_text'](name):
                 ret['changes']['diff'] = 'Replace binary file'
             else:
@@ -5416,27 +5427,7 @@ def prepend(name,
             ret['result'] = True
         return ret
 
-    # if header kwarg is True, use verbatim compare
-    if header:
-        with salt.utils.files.fopen(name, 'rb') as fp_:
-            # read as many lines of target file as length of user input
-            contents = fp_.read()
-            if six.PY3:
-                contents = contents.decode(__salt_system_encoding__)
-            contents = contents.splitlines(True)
-            target_head = contents[0:len(preface)]
-            target_lines = []
-            # strip newline chars from list entries
-            for chunk in target_head:
-                target_lines += chunk.splitlines()
-            # compare current top lines in target file with user input
-            # and write user input if they differ
-            if target_lines != preface:
-                __salt__['file.prepend'](name, *preface)
-            else:
-                # clear changed lines counter if target file not modified
-                count = 0
-    else:
+    if count > 0:
         __salt__['file.prepend'](name, *preface)
 
     with salt.utils.files.fopen(name, 'rb') as fp_:
